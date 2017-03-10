@@ -1,0 +1,205 @@
+Quasar:
+  A web application for a simple list
+
+
+1) Overview
+  Structure:
+    Server:
+      database: PostgreSQL
+      logic: django
+      endpoint: RESTful api
+    Client:
+      communication with server: jQuery
+      View: React
+
+  Server components:
+    logic:
+      django
+      django-REST-framework
+      auth2.0
+    database:
+      PostgreSQL
+
+  Client components:
+    logic:
+      ajax: jQuery
+      main: React
+      style: React-Bootstrap
+    build:
+      webpack
+      babel
+
+2) Building the server
+  2.1) New Django project
+    $ django-admin startproject quasar
+    $ python manage.py runserver 0.0.0.0:8080
+
+
+  2.2) register app 'basic_list' with the project
+    $ python manage.py startapp basic_list
+    quasar/settings.py: add 'basic_list' to Installed_apps:
+    quasar/urls.py: add "url(r'^basic_list/', include('basic_list.urls'))"
+    create 'quasar/basic_list/urls.py', add a dummy route to root
+    create a dummy view for root calls in '/views.py'
+
+  2.3) setting up the database
+    2.3.1) creating a database
+      $ mkdir postgres
+      $ initdb ./postgres
+      $ cp /usr/local/Cellar/postgresql/9.4.5_2/homebrew.mxcl.postgresql.plist ~/Library/LaunchAgents/
+      $ launchctl load -w ~/Library/LaunchAgents/homebrew.mxcl.postgresql.plist
+      $ pg_ctl -D ./postgres -l ./postgres/server.log start
+      $ createuser -P -s -e -d db_mainuser
+      $ createdb -O db_mainuser list_db
+      $ psql list_db
+
+    2.3.2) adjusting settings.py's DATABASE
+      - engine: 'django.db.backends.postgresql'
+      - name: 'list_db'
+      - user: db_mainuser
+      - password: Kaffeelo3
+      - host: ''
+      - port: ''
+
+    2.3.3) apply migrations
+      $ python manage.py migrate
+      check database for success:
+        $ psql list_db
+        $ \dt // lists all tables in the database
+
+
+  2.4) creating the model
+      Model:
+        Entry:
+          - text
+          - date
+          - category
+          - weight
+
+      $ python manage.py makemigrations
+      $ python manage.py migrate
+
+      create two dummy entries
+        1: via python
+         $ python manage.py shell
+         >>> from basic_list.models import Entry
+         >>> e = Entry(text='dummy1', date='2016-03-20T21:22:11.881Z')
+         >>> e.save()
+         >>> Entry.objects.all()
+       2: via psql
+        $ psql list_db
+        list_db=# INSERT INTO basic_list_entry VALUES (3, 'dummy3', '2016-02-20 22:22:11.881+01',1,1);
+        list_db=# SELECT * FROM basic_list_entry;
+
+  2.5) creating the list API
+    2.5.1) installing django-rest-framework
+        quasar/settings.py: add 'rest_framework' to Installed_apps:
+
+    2.5.2) add serializers for the model
+        Create a file in the basic_list directory named serializers.py
+        create a serializer from ModelSerializer
+
+    2.5.3) add views/'controllers'
+        Make use of rest-framework's generic-view classes
+        class EntryList(generics.ListCreateAPIView):
+            queryset = Entry.objects.all().order_by('-date')
+            serializer_class = EntrySerializer
+
+        class EntryDetail(generics.RetrieveUpdateDestroyAPIView):
+            queryset = Entry.objects.all()
+            serializer_class = EntrySerializer
+
+    2.5.4) wire controllers into routing
+        urlpatterns = [
+            url(r'^$', views.index, name='index'),
+            url(r'^entries/$', views.EntryList.as_view()),
+            url(r'^entries/(?P<pk>[0-9]+)/$', views.EntryDetail.as_view()),
+        ]
+
+    2.5.5) test the API
+      $ curl http://localhost:8080/basic_list/entries/
+      $ curl http://localhost:8080/basic_list/entries/1/
+
+      or use the browser with above urls
+
+  3) building the client
+
+    3.1) setting up the build environment
+      - create folder basic_list/static/client/
+        (or create it somewhere else and set up CORS)
+      - in this folder:
+        $ npm init
+        $ npm install --save webpack
+        $ npm install --save react react-dom
+        $ npm i babel-loader babel-preset-es2015 babel-preset-react -S
+        ( for later: react-hot-loader & webpack-dev-server)
+        insert in package.json the following lines under "scripts":
+          "dev": "webpack -d --watch",
+          "build" : "webpack -p"
+     - set up babel:
+        create file .babelrc
+          insert presets for es6 and react
+     - set up webpack:
+        create file webpack.config.js
+        specify desired 'entry' and 'output' files
+        specify 'babel' under 'loaders'
+     - test the build configuration:
+        - in the public folder create an index.html which includes the
+          script "bundle.js"
+        - in the index folder create a file index.jsx rendering a react comp.
+        - $ npm run dev
+    3.2) setting up the test environment
+      - installing jest
+        $ npm install --save-dev jest-cli babel-jest react-addons-test-utils
+        in package.json under "tests" add "jest"
+        in package. json add "jest" and add entries under it to umock all react
+        in package json under "jest". Indicate test file extensions to be
+          of types 'js' and 'jsx' and wire testPathDirs to your source folder
+    3.3) develop the client
+      - use react components to design the view
+      - use a simple model mirroring server model
+      - use the main component as controller
+      - get bootrap's css file and react-bootstrap module
+
+  4) deploying the app
+
+    4.1) get a free heroku account
+    4.2) install virtualenv
+      $ pip install virtualenv
+    4.3) install heroku toolbelt CLI
+      - $ heroku
+      - $ heroku login
+      - use git tool to package your app
+      - create 'requrements.txt' to list python dependencies
+        $ pip freeze
+      - $ heroku create
+      - $ git push heroku master
+      - $ heroku ps:scale web=1
+      - $ heroku logs
+      - have a procfile in root dir of your app
+        procfile: command to run your app
+        e.g.: web: gunicorn gettingstarted.wsgi --log-file -
+      - work locally with virtualenv
+        $ virtualenv venv
+        $ source venv/bin/activate
+      - working with a Postgres database
+        - link to database
+          $ heroku config
+          displays DATABASE_URL
+        - information on database
+          $ heroku pg
+        - link database to app
+           in settings.py of your app add:
+            # Parse database configuration from $DATABASE_URL
+            import dj_database_url
+            ...
+            DATABASES['default'] =  dj_database_url.config()
+           or use
+            import dj_database_url
+            # Update database configuration with $DATABASE_URL.
+            db_from_env = dj_database_url.config(conn_max_age=500)
+            DATABASES['default'].update(db_from_env)
+        - create the database structure for the first time
+          $ heroku run python manage.py migrate
+        - look into the database
+          $ heroku pg:psql
